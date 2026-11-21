@@ -141,6 +141,22 @@ export const App: React.FC = () => {
         }
       }
 
+      // Automatic reconciliation / migration:
+      // If profile currency is 'PHP', auto-heal legacy USD wallets to 'PHP'
+      if ((effectiveProfile.currency || 'PHP') === 'PHP') {
+        const needsHealing = activeWallets.some((w) => w.currency === 'USD' || !w.currency);
+        if (needsHealing) {
+          activeWallets = await storageService.reconcileLegacyWallets(activeWallets, 'PHP');
+          if (session?.user) {
+            for (const hw of activeWallets) {
+              if (hw.currency === 'PHP') {
+                databaseApi.upsertRemoteWallet(hw).catch(console.warn);
+              }
+            }
+          }
+        }
+      }
+
       // Background tasks: fetch live exchange rates and check loan due dates
       fetchLiveExchangeRates().catch(console.warn);
       notificationService.checkPermission().catch(console.warn);
@@ -405,7 +421,19 @@ export const App: React.FC = () => {
       } else {
         // Existing user: hydrate from cloud snapshot
         if (rWallets && rWallets.length > 0) {
-          const sorted = FinanceEngine.sortWallets(rWallets);
+          let hydratedWallets = rWallets;
+          if ((remote.currency || 'PHP') === 'PHP') {
+            const needsHealing = rWallets.some((w) => w.currency === 'USD' || !w.currency);
+            if (needsHealing) {
+              hydratedWallets = await storageService.reconcileLegacyWallets(rWallets, 'PHP');
+              for (const hw of hydratedWallets) {
+                if (hw.currency === 'PHP') {
+                  databaseApi.upsertRemoteWallet(hw).catch(console.warn);
+                }
+              }
+            }
+          }
+          const sorted = FinanceEngine.sortWallets(hydratedWallets);
           setWallets(sorted);
           await storageService.saveWallets(sorted);
         }

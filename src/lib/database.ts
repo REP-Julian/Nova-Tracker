@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { Wallet, Transaction, Loan, Asset, UserProfile } from '../types';
-import { detectUserCountryCurrency } from './currencies';
 
 export const databaseApi = {
   async fetchRemoteWallets(): Promise<Wallet[] | null> {
@@ -14,7 +13,7 @@ export const databaseApi = {
       name: w.name,
       type: w.type,
       balance: Number(w.balance || 0),
-      currency: w.currency || detectUserCountryCurrency(),
+      currency: w.currency || 'PHP',
       icon: w.icon || 'wallet',
       updatedAt: w.updated_at || new Date().toISOString(),
     }));
@@ -297,7 +296,7 @@ export const databaseApi = {
       contactNumber: data.contact_number || '',
       role: data.role || 'Primary Earner',
       theme: data.theme || 'dark',
-      currency: data.currency || detectUserCountryCurrency(),
+      currency: data.currency || 'PHP',
       dailyNecessityCap: Number(data.daily_necessity_cap || 500),
       activeScheduleDays: Array.isArray(data.active_schedule_days) ? data.active_schedule_days : undefined,
       restDayNecessityCap: data.rest_day_necessity_cap !== null && data.rest_day_necessity_cap !== undefined

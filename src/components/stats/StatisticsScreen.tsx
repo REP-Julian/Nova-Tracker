@@ -16,7 +16,7 @@ interface StatisticsScreenProps {
 export const StatisticsScreen: React.FC<StatisticsScreenProps> = ({
   transactions,
   loans,
-  currencySymbol = '$',
+  currencySymbol = '₱',
 }) => {
   const [activeTab, setActiveTab] = useState<'categories' | 'monthly'>('categories');
   const [timeframe, setTimeframe] = useState<string>('6M');

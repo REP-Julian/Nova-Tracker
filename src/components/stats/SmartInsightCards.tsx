@@ -8,7 +8,7 @@ interface SmartInsightCardsProps {
   currencySymbol?: string;
 }
 
-export const SmartInsightCards: React.FC<SmartInsightCardsProps> = ({ transactions, loans, currencySymbol = '$' }) => {
+export const SmartInsightCards: React.FC<SmartInsightCardsProps> = ({ transactions, loans, currencySymbol = '₱' }) => {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const thisMonthExpenses = transactions
     .filter((t) => t.type === 'expense' && t.date.startsWith(currentMonth))

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
+  DEFAULT_CURRENCY,
   detectUserCountryCurrency,
   getCurrencySymbol,
   getCurrencyInfo,
@@ -11,6 +12,9 @@ import {
   fetchLiveExchangeRates,
   BASE_RATES_TO_USD,
 } from '../src/lib/currencies';
+import { INITIAL_WALLETS, INITIAL_PROFILE, storageService } from '../src/lib/storage';
+import { WalletSchema, ProfileSchema } from '../src/lib/schemas';
+import { FinanceEngine } from '../src/services/financeEngine';
 
 describe('Country Currency System', () => {
   it('detects user country currency without throwing', () => {
@@ -248,6 +252,121 @@ describe('Country Currency System', () => {
       expect(res.rates).toBeDefined();
       expect(res.rates.USD).toBe(1);
       expect(res.rates.PHP).toBeGreaterThan(0);
+    });
+  });
+
+  describe('PHP Default Currency & Legacy Reconciliation', () => {
+    it('sets DEFAULT_CURRENCY to PHP strictly', () => {
+      expect(DEFAULT_CURRENCY).toBe('PHP');
+    });
+
+    it('getCurrencyInfo and getCurrencySymbol fallback to PHP', () => {
+      const info = getCurrencyInfo();
+      expect(info.code).toBe('PHP');
+      expect(info.symbol).toBe('₱');
+      expect(getCurrencySymbol()).toBe('₱');
+    });
+
+    it('prioritizes Asia/Manila in detectUserCountryCurrency', () => {
+      const originalDateTimeFormat = Intl.DateTimeFormat;
+      try {
+        // Mock Intl.DateTimeFormat to return Asia/Manila
+        vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({
+          resolvedOptions: () => ({
+            timeZone: 'Asia/Manila',
+            locale: 'en-US', // even if locale says en-US, timezone Asia/Manila must return PHP
+          }),
+        } as any));
+
+        const detected = detectUserCountryCurrency();
+        expect(detected).toBe('PHP');
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+
+    it('WalletSchema and ProfileSchema have PHP default currency and 500 daily cap', () => {
+      const walletParsed = WalletSchema.parse({
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'My Wallet',
+        type: 'cash',
+        balance: 100,
+        updatedAt: new Date().toISOString(),
+      });
+      expect(walletParsed.currency).toBe('PHP');
+
+      const profileParsed = ProfileSchema.parse({
+        id: 'user-1',
+        fullName: 'Test User',
+        email: 'test@example.com',
+        contactNumber: '09123456789',
+        role: 'Primary Earner',
+      });
+      expect(profileParsed.currency).toBe('PHP');
+      expect(profileParsed.dailyNecessityCap).toBe(500);
+    });
+
+    it('INITIAL_WALLETS and INITIAL_PROFILE use PHP', () => {
+      expect(INITIAL_PROFILE.currency).toBe('PHP');
+      expect(INITIAL_WALLETS[0].currency).toBe('PHP');
+      expect(INITIAL_WALLETS[1].currency).toBe('PHP');
+    });
+
+    it('defaults fromCurrency and toCurrency to PHP in getExchangeRate and convertCurrency', () => {
+      // Empty or undefined currencies must default to PHP, not USD!
+      expect(getExchangeRate('', 'PHP')).toBe(1);
+      expect(getExchangeRate('PHP', '')).toBe(1);
+      expect(getExchangeRate('', '')).toBe(1);
+
+      // convertCurrency(250, '', 'PHP') must stay 250 and NEVER multiply by 58.50!
+      expect(convertCurrency(250, '', 'PHP')).toBe(250);
+      expect(convertCurrency(250, 'PHP', '')).toBe(250);
+      expect(convertCurrency(250, '', '')).toBe(250);
+    });
+
+    it('reconciles legacy USD wallet to PHP preventing 14k balance inflation', async () => {
+      const legacyWallets = [
+        {
+          id: 'w-legacy-1',
+          name: 'Cash Pocket',
+          type: 'cash' as const,
+          balance: 250,
+          currency: 'USD', // legacy bug: wallet marked USD when user balance was 250 PHP
+          icon: 'banknote',
+          updatedAt: '2026-01-01',
+        },
+      ];
+
+      // Reconcile legacy wallets with profile currency PHP
+      const healed = await storageService.reconcileLegacyWallets(legacyWallets, 'PHP');
+      expect(healed[0].currency).toBe('PHP');
+      expect(healed[0].balance).toBe(250);
+
+      // Verify FinanceEngine calculation: 250 balance stays ₱250.00 instead of multiplying by 58.50 (~14,625)
+      const totalBalance = FinanceEngine.calculateTotalLiquidBalance(healed, 'PHP');
+      expect(totalBalance).toBe(250);
+    });
+
+    it('storageService.getWallets auto-reconciles legacy USD wallets to PHP when profile is PHP', async () => {
+      localStorage.setItem('bt_profile', JSON.stringify({ ...INITIAL_PROFILE, currency: 'PHP' }));
+      localStorage.setItem('bt_wallets', JSON.stringify([
+        {
+          id: 'w-legacy-auto',
+          name: 'Cash Pocket',
+          type: 'cash',
+          balance: 250,
+          currency: 'USD',
+          icon: 'banknote',
+          updatedAt: '2026-01-01',
+        },
+      ]));
+
+      const loaded = await storageService.getWallets();
+      expect(loaded[0].currency).toBe('PHP');
+      expect(loaded[0].balance).toBe(250);
+
+      const totalBalance = FinanceEngine.calculateTotalLiquidBalance(loaded, 'PHP');
+      expect(totalBalance).toBe(250);
     });
   });
 });

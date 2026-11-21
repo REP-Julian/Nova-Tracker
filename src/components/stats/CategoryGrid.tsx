@@ -9,7 +9,7 @@ interface CategoryGridProps {
 
 export const CategoryGrid: React.FC<CategoryGridProps> = ({
   categories,
-  currencySymbol = '$',
+  currencySymbol = '₱',
 }) => {
   const getCatIcon = (name: string, color: string) => {
     switch (name.toLowerCase()) {

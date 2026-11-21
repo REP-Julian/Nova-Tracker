@@ -26,7 +26,7 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({
   assets,
   onAddAsset,
   onDeleteAsset,
-  currencySymbol = '$',
+  currencySymbol = '₱',
   currency,
 }) => {
   const [isAddOpen, setIsAddOpen] = useState(false);

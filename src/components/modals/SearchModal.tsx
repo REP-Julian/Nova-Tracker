@@ -18,7 +18,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   onClose,
   transactions,
   loans,
-  currencySymbol = '$',
+  currencySymbol = '₱',
   onDeleteTransaction,
 }) => {
   const [query, setQuery] = useState('');

@@ -3,13 +3,20 @@ import '@testing-library/jest-dom';
 // In-memory indexedDB shim for JSDOM test environment
 if (typeof window !== 'undefined' && !window.indexedDB) {
   (window as any).indexedDB = {
-    open: () => ({
-      result: {},
-      addEventListener: () => {},
-      onupgradeneeded: () => {},
-      onsuccess: () => {},
-      onerror: () => {},
-    }),
+    open: () => {
+      const req: any = {
+        result: {},
+        addEventListener: () => {},
+        onupgradeneeded: () => {},
+        onsuccess: () => {},
+        onerror: () => {},
+      };
+      setTimeout(() => {
+        req.error = new Error('IndexedDB not supported in test environment');
+        req.onerror?.();
+      }, 0);
+      return req;
+    },
   };
 }
 

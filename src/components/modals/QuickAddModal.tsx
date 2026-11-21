@@ -47,7 +47,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   initialType = 'expense',
   wallets,
   onClose,
-  currencySymbol = '$',
+  currencySymbol = '₱',
   onSubmit,
 }) => {
   const [type, setType] = useState<TransactionType>(initialType);

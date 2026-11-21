@@ -9,7 +9,7 @@ interface LoanCardProps {
   currencySymbol?: string;
 }
 
-export const LoanCard: React.FC<LoanCardProps> = ({ loan, onRepay, onDelete, currencySymbol = '$' }) => {
+export const LoanCard: React.FC<LoanCardProps> = ({ loan, onRepay, onDelete, currencySymbol = '₱' }) => {
   const getStatusBadge = (status: Loan['status']) => {
     switch (status) {
       case 'settled':

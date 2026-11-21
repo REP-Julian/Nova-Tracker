@@ -26,7 +26,7 @@ interface LoanLedgerScreenProps {
 export const LoanLedgerScreen: React.FC<LoanLedgerScreenProps> = ({
   loans,
   wallets,
-  currencySymbol = '$',
+  currencySymbol = '₱',
   onLendMoney,
   onRepayLoan,
   onDeleteLoan,

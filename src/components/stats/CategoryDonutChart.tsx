@@ -13,7 +13,7 @@ export const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
   totalAmount,
   monthLabel,
   categories,
-  currencySymbol = '$',
+  currencySymbol = '₱',
 }) => {
   const radius = 80;
   const circumference = 2 * Math.PI * radius; // 502.65

@@ -5,7 +5,7 @@ export const WalletSchema = z.object({
   name: z.string().min(1, 'Wallet name required'),
   type: z.enum(['cash', 'savings', 'emergency', 'vault', 'custom']),
   balance: z.number(),
-  currency: z.string().default('USD'),
+  currency: z.string().default('PHP'),
   icon: z.string().default('wallet'),
   updatedAt: z.string(),
 });
@@ -64,6 +64,6 @@ export const ProfileSchema = z.object({
   contactNumber: z.string().min(1, 'Contact number required'),
   role: z.string().min(1, 'Role required'),
   theme: z.enum(['dark', 'light']).default('dark'),
-  currency: z.string().default('USD'),
-  dailyNecessityCap: z.number().positive('Daily cap must be positive').default(60),
+  currency: z.string().default('PHP'),
+  dailyNecessityCap: z.number().positive('Daily cap must be positive').default(500),
 });

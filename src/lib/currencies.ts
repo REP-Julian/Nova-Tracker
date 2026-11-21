@@ -79,40 +79,15 @@ export const COUNTRY_TO_CURRENCY: Record<string, string> = {
 };
 
 /**
- * Detects the user's country currency based on system locale and timezone.
+ * Detects the user's country currency based on system timezone and locale.
+ * Prioritizes Asia/Manila and defaults strictly to PHP.
  */
 export function detectUserCountryCurrency(): string {
   try {
-    if (typeof navigator !== 'undefined') {
-      const langs = navigator.languages || [navigator.language];
-      for (const lang of langs) {
-        if (!lang) continue;
-        try {
-          const loc = new Intl.Locale(lang);
-          if (loc.region && COUNTRY_TO_CURRENCY[loc.region.toUpperCase()]) {
-            return COUNTRY_TO_CURRENCY[loc.region.toUpperCase()];
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
     const resolved = Intl.DateTimeFormat().resolvedOptions();
-    if (resolved.locale) {
-      try {
-        const loc = new Intl.Locale(resolved.locale);
-        if (loc.region && COUNTRY_TO_CURRENCY[loc.region.toUpperCase()]) {
-          return COUNTRY_TO_CURRENCY[loc.region.toUpperCase()];
-        }
-      } catch {
-        // ignore
-      }
-    }
-
     if (resolved.timeZone) {
       const tz = resolved.timeZone;
-      if (tz === 'Asia/Manila') return 'PHP';
+      if (tz === 'Asia/Manila' || tz.includes('Manila')) return 'PHP';
       if (tz.includes('Jakarta') || tz.includes('Makassar') || tz.includes('Jayapura') || tz.includes('Pontianak')) return 'IDR';
       if (tz === 'Asia/Singapore') return 'SGD';
       if (tz === 'Asia/Kuala_Lumpur') return 'MYR';
@@ -126,6 +101,33 @@ export function detectUserCountryCurrency(): string {
       if (tz.startsWith('Australia/')) return 'AUD';
       if (tz.startsWith('America/Toronto') || tz.startsWith('America/Vancouver') || tz.startsWith('America/Montreal') || tz.startsWith('America/Edmonton')) return 'CAD';
     }
+
+    if (typeof navigator !== 'undefined') {
+      const langs = navigator.languages || [navigator.language];
+      for (const lang of langs) {
+        if (!lang) continue;
+        try {
+          const loc = new Intl.Locale(lang);
+          if (loc.region?.toUpperCase() === 'PH') return 'PHP';
+          if (loc.region && COUNTRY_TO_CURRENCY[loc.region.toUpperCase()]) {
+            return COUNTRY_TO_CURRENCY[loc.region.toUpperCase()];
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    if (resolved.locale) {
+      try {
+        const loc = new Intl.Locale(resolved.locale);
+        if (loc.region && COUNTRY_TO_CURRENCY[loc.region.toUpperCase()]) {
+          return COUNTRY_TO_CURRENCY[loc.region.toUpperCase()];
+        }
+      } catch {
+        // ignore
+      }
+    }
   } catch {
     // ignore
   }
@@ -133,10 +135,10 @@ export function detectUserCountryCurrency(): string {
   return 'PHP';
 }
 
-export const DEFAULT_CURRENCY = detectUserCountryCurrency();
+export const DEFAULT_CURRENCY = 'PHP';
 
 export function getCurrencyInfo(code?: string): CurrencyOption {
-  const targetCode = code || detectUserCountryCurrency();
+  const targetCode = code || 'PHP';
   const found = WORLD_CURRENCIES.find(c => c.code.toUpperCase() === targetCode.toUpperCase());
   return found || { code: targetCode, symbol: targetCode, flag: '🌐', name: targetCode };
 }
@@ -293,8 +295,8 @@ export async function fetchLiveExchangeRates(): Promise<{
  * e.g. getExchangeRate('PHP', 'USD') => ~0.0171
  */
 export function getExchangeRate(fromCurrency: string, toCurrency: string): number {
-  const from = (fromCurrency || 'USD').toUpperCase();
-  const to = (toCurrency || 'USD').toUpperCase();
+  const from = (fromCurrency || 'PHP').toUpperCase();
+  const to = (toCurrency || 'PHP').toUpperCase();
   if (from === to) return 1;
 
   const rates = getExchangeRates();
@@ -314,8 +316,8 @@ export function convertCurrency(
   toCurrency: string
 ): number {
   if (isNaN(amount) || amount === 0) return 0;
-  const from = (fromCurrency || 'USD').toUpperCase();
-  const to = (toCurrency || 'USD').toUpperCase();
+  const from = (fromCurrency || 'PHP').toUpperCase();
+  const to = (toCurrency || 'PHP').toUpperCase();
   if (from === to) return amount;
 
   const rate = getExchangeRate(from, to);
@@ -347,8 +349,8 @@ export function convertFinancialDataset<
   profile: any;
   rate: number;
 } {
-  const from = (fromCurrency || 'USD').toUpperCase();
-  const to = (toCurrency || 'USD').toUpperCase();
+  const from = (fromCurrency || 'PHP').toUpperCase();
+  const to = (toCurrency || 'PHP').toUpperCase();
   if (from === to) {
     return { ...data, rate: 1 };
   }

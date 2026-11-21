@@ -14,7 +14,7 @@ interface TransactionFeedProps {
 export const TransactionFeed: React.FC<TransactionFeedProps> = ({
   transactions,
   wallets,
-  currencySymbol = '$',
+  currencySymbol = '₱',
   onDeleteTransaction,
   onViewAll,
 }) => {

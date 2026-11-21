@@ -12,7 +12,7 @@ export const HeroBalanceCard: React.FC<HeroBalanceCardProps> = ({
   totalBalance,
   totalIncome,
   totalExpenses,
-  currencySymbol = '$',
+  currencySymbol = '₱',
 }) => {
   const netAmount = totalIncome - totalExpenses;
   const isPositive = netAmount >= 0;

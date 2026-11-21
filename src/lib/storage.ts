@@ -1,6 +1,5 @@
 import { get, set } from 'idb-keyval';
 import { Wallet, Transaction, Loan, Asset, UserProfile } from '../types';
-import { detectUserCountryCurrency } from './currencies';
 
 export interface AiConfig {
   aiBaseUrl?: string;
@@ -17,19 +16,31 @@ const STORAGE_KEYS = {
   AI_CONFIG: 'bt_ai_config',
 };
 
+async function withTimeout<T>(promise: Promise<T>, ms = 2500): Promise<T> {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('IndexedDB operation timed out')), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 async function getItem<T>(key: string, fallbackDefault: T): Promise<T> {
   try {
-    const val = await get<T>(key);
+    const val = await withTimeout(get<T>(key), 2500);
     if (val !== undefined && val !== null) return val;
   } catch (err) {
-    console.warn(`IndexedDB read failed for ${key}, checking localStorage:`, err);
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn(`IndexedDB read failed for ${key}, checking localStorage:`, err);
+    }
   }
 
   try {
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw) as T;
   } catch (e) {
-    console.error(`localStorage read failed for ${key}:`, e);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(`localStorage read failed for ${key}:`, e);
+    }
   }
 
   return fallbackDefault;
@@ -37,15 +48,19 @@ async function getItem<T>(key: string, fallbackDefault: T): Promise<T> {
 
 async function setItem<T>(key: string, value: T): Promise<void> {
   try {
-    await set(key, value);
+    await withTimeout(set(key, value), 2500);
   } catch (err) {
-    console.warn(`IndexedDB write failed for ${key}, falling back to localStorage:`, err);
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn(`IndexedDB write failed for ${key}, falling back to localStorage:`, err);
+    }
   }
 
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
-    console.error(`localStorage write failed for ${key}:`, e);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(`localStorage write failed for ${key}:`, e);
+    }
   }
 }
 
@@ -56,7 +71,7 @@ export const INITIAL_WALLETS: Wallet[] = [
     name: 'Cash & Pocket',
     type: 'cash',
     balance: 0.00,
-    currency: detectUserCountryCurrency(),
+    currency: 'PHP',
     icon: 'banknote',
     updatedAt: new Date().toISOString(),
   },
@@ -65,7 +80,7 @@ export const INITIAL_WALLETS: Wallet[] = [
     name: 'Savings Safe',
     type: 'savings',
     balance: 0.00,
-    currency: detectUserCountryCurrency(),
+    currency: 'PHP',
     icon: 'vault',
     updatedAt: new Date().toISOString(),
   },
@@ -85,7 +100,7 @@ export const INITIAL_PROFILE: UserProfile = {
   contactNumber: '',
   role: 'Primary Earner',
   theme: 'dark',
-  currency: detectUserCountryCurrency(),
+  currency: 'PHP',
   dailyNecessityCap: 500.00,
   activeScheduleDays: [1, 2, 4, 5, 6], // Mon, Tue, Thu, Fri, Sat
   restDayNecessityCap: 150.00,
@@ -94,7 +109,35 @@ export const INITIAL_PROFILE: UserProfile = {
 // Storage helper functions
 export const storageService = {
   async getWallets(): Promise<Wallet[]> {
-    return getItem<Wallet[]>(STORAGE_KEYS.WALLETS, INITIAL_WALLETS);
+    const wallets = await getItem<Wallet[]>(STORAGE_KEYS.WALLETS, INITIAL_WALLETS);
+    try {
+      const profile = await getItem<UserProfile>(STORAGE_KEYS.PROFILE, INITIAL_PROFILE);
+      return await this.reconcileLegacyWallets(wallets, profile?.currency || 'PHP');
+    } catch {
+      return wallets;
+    }
+  },
+  async reconcileLegacyWallets(wallets: Wallet[], profileCurrency?: string): Promise<Wallet[]> {
+    const curr = profileCurrency || 'PHP';
+    if (curr === 'PHP') {
+      let changed = false;
+      const healed = wallets.map((w) => {
+        if (w.currency === 'USD' || !w.currency) {
+          changed = true;
+          return {
+            ...w,
+            currency: 'PHP',
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return w;
+      });
+      if (changed) {
+        await this.saveWallets(healed);
+        return healed;
+      }
+    }
+    return wallets;
   },
   async saveWallets(wallets: Wallet[]): Promise<void> {
     await setItem(STORAGE_KEYS.WALLETS, wallets);

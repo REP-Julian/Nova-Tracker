@@ -22,7 +22,7 @@ export const AddLoanModal: React.FC<AddLoanModalProps> = ({
   wallets,
   isOpen,
   onClose,
-  currencySymbol = '$',
+  currencySymbol = '₱',
   onSubmit,
 }) => {
   const [borrowerName, setBorrowerName] = useState('');

@@ -18,7 +18,7 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
-  currencySymbol = '$',
+  currencySymbol = '₱',
 }) => {
   const [amount, setAmount] = useState<string>(loan.remainingAmount.toString());
   const [destinationWalletId, setDestinationWalletId] = useState<string>(

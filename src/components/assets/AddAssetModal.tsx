@@ -18,7 +18,7 @@ interface AddAssetModalProps {
 export const AddAssetModal: React.FC<AddAssetModalProps> = ({
   isOpen,
   onClose,
-  currencySymbol = '$',
+  currencySymbol = '₱',
   onSubmit,
 }) => {
   const [name, setName] = useState('');

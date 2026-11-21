@@ -36,7 +36,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   transactions,
   loans,
   profile,
-  currencySymbol = '$',
+  currencySymbol = '₱',
 }) => {
   const [history, setHistory] = useState<AppNotification[]>([]);
 

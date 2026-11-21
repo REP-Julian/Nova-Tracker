@@ -18,7 +18,7 @@ export const DailyNecessityWidget: React.FC<DailyNecessityWidgetProps> = ({
   percentage,
   isOverBudget,
   isWorkDay = true,
-  currencySymbol = '$',
+  currencySymbol = '₱',
 }) => {
   return (
     <div className="necessity-widget">

@@ -23,7 +23,7 @@ export const MonthlySpendingChart: React.FC<MonthlySpendingChartProps> = ({
   transactions,
   timeframe,
   onTimeframeChange,
-  currencySymbol = '$',
+  currencySymbol = '₱',
 }) => {
   // Aggregate real transactions by month for the last 6 months
   const now = new Date();
