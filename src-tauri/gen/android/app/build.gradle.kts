@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("rust")
+    // id("rust")
 }
 
 val tauriProperties = Properties().apply {
@@ -76,9 +76,9 @@ kotlin {
     }
 }
 
-rust {
-    rootDirRel = "../../../"
-}
+// rust {
+//     rootDirRel = "../../../"
+// }
 
 dependencies {
     implementation("androidx.webkit:webkit:1.14.0")

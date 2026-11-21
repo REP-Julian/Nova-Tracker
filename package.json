@@ -15,7 +15,7 @@
     "@supabase/supabase-js": "^2.49.1",
     "@tauri-apps/api": "^2.2.0",
     "@tauri-apps/plugin-deep-link": "^2.2.0",
-    "@tauri-apps/plugin-notification": "^2.2.1",
+    "@tauri-apps/plugin-notification": "^2.8.1",
     "@tauri-apps/plugin-opener": "^2.2.5",
     "idb-keyval": "^6.2.1",
     "lucide-react": "^1.16.0",
