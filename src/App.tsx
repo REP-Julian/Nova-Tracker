@@ -1065,12 +1065,45 @@ export const App: React.FC = () => {
                       setCurrentTab('home');
                     }}
                     onResetData={async () => {
+                      const confirmed = window.confirm(
+                        'Start fresh on your account?\n\nThis will permanently delete all transactions, loans, assets, and reset all wallet balances to ₱0.00 (both on this device and in your cloud account).'
+                      );
+                      if (!confirmed) return;
+
+                      // 1. Wipe remote cloud database if logged into Supabase
+                      try {
+                        await databaseApi.clearUserCloudData();
+                      } catch (err) {
+                        console.warn('Cloud reset error:', err);
+                      }
+
+                      // 2. Clear local storage and offline queue
                       await storageService.clearAllData();
-                      setWallets(FinanceEngine.sortWallets(INITIAL_WALLETS));
+                      await OfflineQueueManager.clearQueue();
+
+                      // 3. Clear notification history
+                      try {
+                        localStorage.removeItem('bt_notification_history');
+                      } catch {
+                        // ignore
+                      }
+
+                      // 4. Reset in-memory state to clean ₱0.00 slate
+                      const freshWallets = FinanceEngine.sortWallets(
+                        INITIAL_WALLETS.map((w) => ({ ...w, balance: 0.00, currency: 'PHP' }))
+                      );
+                      setWallets(freshWallets);
+                      await storageService.saveWallets(freshWallets);
                       setTransactions([]);
+                      await storageService.saveTransactions([]);
                       setLoans([]);
+                      await storageService.saveLoans([]);
                       setAssets([]);
-                      alert('Local data reset to a clean slate.');
+                      await storageService.saveAssets([]);
+                      setPendingSyncCount(0);
+                      setCurrentTab('home');
+
+                      alert('Account successfully reset to a clean slate (₱0.00).');
                     }}
                     onBack={() => setCurrentTab('home')}
                     pendingSyncCount={pendingSyncCount}

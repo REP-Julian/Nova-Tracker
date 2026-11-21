@@ -285,6 +285,55 @@ export const databaseApi = {
     return true;
   },
 
+  async clearUserCloudData(): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      // Delete all user financial records from Supabase cloud tables
+      await Promise.allSettled([
+        supabase.from('bt_loan_repayments').delete().eq('user_id', user.id),
+        supabase.from('bt_loans').delete().eq('user_id', user.id),
+        supabase.from('bt_transactions').delete().eq('user_id', user.id),
+        supabase.from('bt_assets').delete().eq('user_id', user.id),
+        supabase.from('bt_wallets').delete().eq('user_id', user.id),
+      ]);
+
+      // Re-seed clean zero-balance initial wallets with user_id in cloud
+      const cleanWallets = [
+        {
+          id: 'w-cash-01',
+          name: 'Cash & Pocket',
+          type: 'cash',
+          balance: 0.00,
+          currency: 'PHP',
+          icon: 'banknote',
+          user_id: user.id,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          id: 'w-savings-02',
+          name: 'Savings Safe',
+          type: 'savings',
+          balance: 0.00,
+          currency: 'PHP',
+          icon: 'vault',
+          user_id: user.id,
+          updated_at: new Date().toISOString(),
+        },
+      ];
+
+      await supabase.from('bt_wallets').upsert(cleanWallets);
+
+      return { success: true };
+    } catch (e: any) {
+      console.warn('Error clearing cloud data:', e);
+      return { success: false, error: e?.message || 'Failed to clear cloud data' };
+    }
+  },
+
   async fetchRemoteProfile(userId: string): Promise<UserProfile | null> {
     const { data, error } = await supabase.from('bt_profiles').select('*').eq('id', userId).maybeSingle();
     if (error || !data) return null;

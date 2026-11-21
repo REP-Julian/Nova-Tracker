@@ -1118,7 +1118,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
               cursor: 'pointer',
             }}
           >
-            🗑️ Clear Local Cache & Reset Clean
+            🗑️ Wipe All Data & Start Fresh (₱0.00 Clean Slate)
           </button>
         )}
       </form>
