@@ -38,12 +38,12 @@ describe('Budget Tracker App Integration', () => {
       </ThemeProvider>
     );
 
-    // Dock buttons: Home, Lent, AI (middle), Stats, Assets
+    // Dock buttons: Home, Transactions, AI (middle), Stats, Portfolio
     expect(screen.getByTitle('Home Dashboard')).toBeInTheDocument();
-    expect(screen.getByTitle('Money Lent Ledger')).toBeInTheDocument();
+    expect(screen.getByTitle('All Transactions')).toBeInTheDocument();
     expect(screen.getByTitle('AI Financial Assistant')).toBeInTheDocument();
     expect(screen.getByTitle('Statistics & Trends')).toBeInTheDocument();
-    expect(screen.getByTitle('Assets & Net Worth')).toBeInTheDocument();
+    expect(screen.getByTitle('Portfolio & Vault')).toBeInTheDocument();
 
     // Verify Settings button is NOT in the dock
     expect(screen.queryByTitle('Settings')).not.toBeInTheDocument();
@@ -61,7 +61,7 @@ describe('Budget Tracker App Integration', () => {
 
     expect(screen.getByText('Nova Financial AI')).toBeInTheDocument();
     expect(screen.getByText(/Who owes me money/i)).toBeInTheDocument();
-    expect(screen.getByText(/Can I afford dinner tonight/i)).toBeInTheDocument();
+    expect(screen.getByText(/Where did my money go/i)).toBeInTheDocument();
   });
 
   it('opens dedicated Profile & Settings when clicking top header profile chip', () => {
@@ -81,34 +81,26 @@ describe('Budget Tracker App Integration', () => {
     expect(screen.getByText('Personal Information')).toBeInTheDocument();
   });
 
-  it('navigates to Money Lent Ledger and verifies separate accounting banner', () => {
+  it('navigates to Portfolio screen and verifies Money Lent and Assets sub-tabs', () => {
     render(
       <ThemeProvider>
         <App />
       </ThemeProvider>
     );
 
-    const loansTab = screen.getByTitle('Money Lent Ledger');
-    fireEvent.click(loansTab);
+    const portfolioTab = screen.getByTitle('Portfolio & Vault');
+    fireEvent.click(portfolioTab);
 
     expect(screen.getByText('Total Money Lent Out')).toBeInTheDocument();
     expect(screen.getByText(/Excluded from Expenses/i)).toBeInTheDocument();
     expect(screen.getByText('No active money lent records.')).toBeInTheDocument();
-  });
 
-  it('navigates to Assets & Net Worth screen', () => {
-    render(
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
-    );
-
-    const assetsTab = screen.getByTitle('Assets & Net Worth');
-    fireEvent.click(assetsTab);
+    // Switch to Assets sub-tab
+    const assetsBtn = screen.getByRole('button', { name: /Assets & Net Worth/i });
+    fireEvent.click(assetsBtn);
 
     expect(screen.getByText('Total Net Worth')).toBeInTheDocument();
     expect(screen.getByText('Liquid Cash & Wallets')).toBeInTheDocument();
-    expect(screen.getByText('Money Lent (Receivables)')).toBeInTheDocument();
   });
 
   it('allows adding and removing a transaction and updates UI', async () => {

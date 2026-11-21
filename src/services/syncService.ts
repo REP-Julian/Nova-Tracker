@@ -48,6 +48,9 @@ export class SyncService {
                 success = await databaseApi.upsertRemoteLoan(item.payload as Loan);
               }
               break;
+            case 'repayments':
+              success = await databaseApi.upsertRemoteRepayment(item.payload as any);
+              break;
             case 'assets':
               if (item.action === 'delete') {
                 const payload = item.payload as { id: string } | string;

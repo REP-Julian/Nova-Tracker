@@ -5,9 +5,10 @@ import { Transaction, Loan } from '../../types';
 interface SmartInsightCardsProps {
   transactions: Transaction[];
   loans: Loan[];
+  currencySymbol?: string;
 }
 
-export const SmartInsightCards: React.FC<SmartInsightCardsProps> = ({ transactions, loans }) => {
+export const SmartInsightCards: React.FC<SmartInsightCardsProps> = ({ transactions, loans, currencySymbol = '$' }) => {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const thisMonthExpenses = transactions
     .filter((t) => t.type === 'expense' && t.date.startsWith(currentMonth))
@@ -23,7 +24,7 @@ export const SmartInsightCards: React.FC<SmartInsightCardsProps> = ({ transactio
         </div>
         <div>
           {thisMonthExpenses > 0 ? (
-            <>Current month spending is <strong>${thisMonthExpenses.toFixed(2)}</strong>.</>
+            <>Current month spending is <strong>{currencySymbol}{thisMonthExpenses.toFixed(2)}</strong>.</>
           ) : (
             <>No expenses recorded yet for <strong>{new Date().toLocaleDateString('en-US', { month: 'long' })}</strong>.</>
           )}

@@ -20,10 +20,20 @@ import {
   RefreshCw,
   Sparkles,
   Save,
+  Bell,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
-import { WORLD_CURRENCIES, getCurrencySymbol } from '../../lib/currencies';
+import {
+  WORLD_CURRENCIES,
+  getCurrencySymbol,
+  getExchangeRate,
+  fetchLiveExchangeRates,
+  convertCurrency,
+  subscribeExchangeRates,
+} from '../../lib/currencies';
+import { notificationService } from '../../services/notificationService';
 import { AiClientService, AiModelOption } from '../../services/aiClientService';
 import '../../styles/profile.css';
 
@@ -33,7 +43,7 @@ interface ProfileSettingsScreenProps {
   onResetData?: () => void;
   onOpenAuth?: () => void;
   onSignOut?: () => void;
-  onBack: () => void;
+  onBack?: () => void;
   pendingSyncCount?: number;
 }
 
@@ -67,6 +77,55 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
   const [isSaved, setIsSaved] = useState(false);
   const [isAiSaved, setIsAiSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Real-time currency & notification state
+  const [converterAmount, setConverterAmount] = useState('100');
+  const [converterTarget, setConverterTarget] = useState(profile.currency === 'USD' ? 'PHP' : 'USD');
+  const [isRefreshingRates, setIsRefreshingRates] = useState(false);
+  const [ratesNotice, setRatesNotice] = useState<string | null>(null);
+  const [notificationPermitted, setNotificationPermitted] = useState(false);
+  const [testNotifSuccess, setTestNotifSuccess] = useState(false);
+  const [, setRatesTick] = useState(0);
+
+  useEffect(() => {
+    notificationService.checkPermission().then(setNotificationPermitted);
+    const unsub = subscribeExchangeRates(() => {
+      setRatesTick((t) => t + 1);
+    });
+    return unsub;
+  }, []);
+
+  const handleRefreshRates = async () => {
+    setIsRefreshingRates(true);
+    try {
+      const res = await fetchLiveExchangeRates();
+      setRatesNotice(res.success ? 'Real-time exchange rates updated!' : 'Using latest live cached rates');
+    } catch {
+      setRatesNotice('Using offline rates cache');
+    } finally {
+      setIsRefreshingRates(false);
+      setTimeout(() => setRatesNotice(null), 3500);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    await notificationService.sendTestNotification();
+    setTestNotifSuccess(true);
+    setNotificationPermitted(true);
+    setTimeout(() => setTestNotifSuccess(false), 3500);
+  };
+
+  const handleRequestNotification = async () => {
+    const granted = await notificationService.requestPermission();
+    setNotificationPermitted(granted);
+    if (granted) {
+      await notificationService.send(
+        '🔔 Real-Time Notifications Enabled',
+        'You will now receive instant phone alerts for transactions, budget caps, and loans.',
+        'system'
+      );
+    }
+  };
 
   // Sync component state if profile prop changes (e.g. after sign in or sign out)
   useEffect(() => {
@@ -111,9 +170,16 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
   };
 
   const toggleDay = (dayIndex: number) => {
-    setActiveDays((prev) =>
-      prev.includes(dayIndex) ? prev.filter((d) => d !== dayIndex) : [...prev, dayIndex].sort()
-    );
+    const next = activeDays.includes(dayIndex)
+      ? activeDays.filter((d) => d !== dayIndex)
+      : [...activeDays, dayIndex].sort((a, b) => a - b);
+    setActiveDays(next);
+    onUpdateProfile({
+      ...profile,
+      activeScheduleDays: next,
+      dailyNecessityCap: parseFloat(dailyCap) || 500,
+      restDayNecessityCap: parseFloat(restCap) || 150,
+    });
   };
 
   const handleSaveAi = (overrideModel?: string) => {
@@ -174,7 +240,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
       aiModel: aiModel.trim() || undefined,
     };
     onUpdateProfile(updated);
-    onBack();
+    onBack?.();
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -451,7 +517,26 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
                   onChange={(e) => {
                     const newCurr = e.target.value;
                     setCurrency(newCurr);
-                    onUpdateProfile({ ...profile, currency: newCurr });
+                    if (converterTarget === newCurr) {
+                      setConverterTarget(newCurr === 'USD' ? 'PHP' : 'USD');
+                    }
+                    onUpdateProfile({
+                      ...profile,
+                      username,
+                      fullName,
+                      email,
+                      contactNumber,
+                      role,
+                      theme,
+                      currency: newCurr,
+                      dailyNecessityCap: parseFloat(dailyCap) || 500,
+                      activeScheduleDays: activeDays,
+                      restDayNecessityCap: parseFloat(restCap) || 150,
+                      avatarUrl,
+                      aiBaseUrl: aiBaseUrl.trim() || undefined,
+                      aiApiKey: aiApiKey.trim() || undefined,
+                      aiModel: aiModel.trim() || undefined,
+                    });
                   }}
                 >
                   {WORLD_CURRENCIES.map((c) => (
@@ -460,6 +545,97 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
                     </option>
                   ))}
                 </select>
+
+                {/* Real-time exchange rate badge & refresh */}
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    background: 'var(--card-elevated, rgba(255, 255, 255, 0.04))',
+                    border: '1px solid var(--card-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '11px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: 'var(--accent-green)', fontWeight: 800 }}>● Live Rate:</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      1 {currency} = {getExchangeRate(currency, currency === 'USD' ? 'PHP' : 'USD').toFixed(4)}{' '}
+                      {currency === 'USD' ? 'PHP' : 'USD'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRefreshRates}
+                    disabled={isRefreshingRates}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--neon-yellow)',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <RefreshCw size={11} className={isRefreshingRates ? 'animate-spin' : ''} />
+                    {isRefreshingRates ? 'Updating...' : 'Refresh'}
+                  </button>
+                </div>
+
+                {ratesNotice && (
+                  <div style={{ fontSize: '11px', color: 'var(--accent-green)', marginTop: '4px', fontWeight: 600 }}>
+                    ✓ {ratesNotice}
+                  </div>
+                )}
+
+                {/* Quick Live Calculator */}
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '10px',
+                    borderRadius: '10px',
+                    background: 'rgba(56, 189, 248, 0.06)',
+                    border: '1px solid rgba(56, 189, 248, 0.2)',
+                  }}
+                >
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <ArrowRightLeft size={12} /> Live Currency Test Converter
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      className="input-field"
+                      style={{ width: '80px', padding: '4px 8px', fontSize: '12px' }}
+                      value={converterAmount}
+                      onChange={(e) => setConverterAmount(e.target.value)}
+                      placeholder="Amt"
+                    />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>{currency}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>=</span>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--neon-yellow)' }}>
+                      {getCurrencySymbol(converterTarget)}
+                      {convertCurrency(parseFloat(converterAmount) || 0, currency, converterTarget).toFixed(2)}
+                    </span>
+                    <select
+                      className="input-field"
+                      style={{ padding: '4px 6px', fontSize: '11px', width: '70px', marginLeft: 'auto' }}
+                      value={converterTarget}
+                      onChange={(e) => setConverterTarget(e.target.value)}
+                    >
+                      {WORLD_CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -562,6 +738,17 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
                     }}
                     value={dailyCap}
                     onChange={(e) => setDailyCap(e.target.value)}
+                    onBlur={() => {
+                      const num = parseFloat(dailyCap);
+                      if (!isNaN(num) && num >= 0) {
+                        onUpdateProfile({
+                          ...profile,
+                          dailyNecessityCap: num,
+                          activeScheduleDays: activeDays,
+                          restDayNecessityCap: parseFloat(restCap) || 150,
+                        });
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -595,6 +782,17 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
                     }}
                     value={restCap}
                     onChange={(e) => setRestCap(e.target.value)}
+                    onBlur={() => {
+                      const num = parseFloat(restCap);
+                      if (!isNaN(num) && num >= 0) {
+                        onUpdateProfile({
+                          ...profile,
+                          dailyNecessityCap: parseFloat(dailyCap) || 500,
+                          activeScheduleDays: activeDays,
+                          restDayNecessityCap: num,
+                        });
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -826,6 +1024,76 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({
               </div>
             </div>
             <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Local Active</span>
+          </div>
+        </div>
+
+        {/* Section 5: Real-Time Phone & Device Notifications */}
+        <div className="section-group-label">Device Notifications</div>
+        <div className="settings-card-group">
+          <div className="settings-row-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="settings-row-left">
+                <div className="settings-row-icon" style={{ color: 'var(--neon-yellow)' }}>
+                  <Bell size={15} />
+                </div>
+                <div>
+                  <div className="settings-field-title">Real-Time Phone Alerts</div>
+                  <div className="settings-field-desc">Transactions, necessity caps & loan due dates</div>
+                </div>
+              </div>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '3px 8px',
+                  borderRadius: 'var(--radius-full)',
+                  background: notificationPermitted ? 'rgba(34, 197, 94, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                  color: notificationPermitted ? 'var(--accent-green)' : 'var(--accent-pink)',
+                  border: notificationPermitted ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(244, 63, 94, 0.3)',
+                }}
+              >
+                {notificationPermitted ? '✓ Active' : 'Action Required'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              {!notificationPermitted && (
+                <button
+                  type="button"
+                  onClick={handleRequestNotification}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'var(--neon-yellow)',
+                    color: 'var(--neon-yellow-text)',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Enable Phone Notifications
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleTestNotification}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  background: testNotifSuccess ? 'rgba(34, 197, 94, 0.2)' : 'var(--card-elevated)',
+                  color: testNotifSuccess ? 'var(--accent-green)' : 'var(--text-primary)',
+                  border: testNotifSuccess ? '1px solid var(--accent-green)' : '1px solid var(--card-border)',
+                  fontWeight: 700,
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                }}
+              >
+                {testNotifSuccess ? '✓ Test Sent!' : 'Send Test Notification'}
+              </button>
+            </div>
           </div>
         </div>
 

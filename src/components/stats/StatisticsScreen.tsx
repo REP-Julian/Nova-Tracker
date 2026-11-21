@@ -61,7 +61,7 @@ export const StatisticsScreen: React.FC<StatisticsScreenProps> = ({
             onTimeframeChange={setTimeframe}
             currencySymbol={currencySymbol}
           />
-          <SmartInsightCards transactions={transactions} loans={loans} />
+          <SmartInsightCards transactions={transactions} loans={loans} currencySymbol={currencySymbol} />
         </>
       )}
     </div>

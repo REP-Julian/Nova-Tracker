@@ -158,7 +158,7 @@ export class AiClientService {
 
     // 1. Wallets & Total Liquid Cash
     const sortedWallets = FinanceEngine.sortWallets(wallets);
-    const totalBalance = FinanceEngine.calculateTotalLiquidBalance(sortedWallets);
+    const totalBalance = FinanceEngine.calculateTotalLiquidBalance(sortedWallets, profile.currency || 'PHP');
     const walletLines = sortedWallets
       .map((w) => `• ${w.name} (${w.type}): ${currencySymbol}${w.balance.toFixed(2)}`)
       .join('\n');
@@ -168,12 +168,12 @@ export class AiClientService {
     // 3. Daily Necessity Schedule & Today's Status
     const today = new Date();
     const dayOfWeek = today.getDay();
-    const activeDays = profile.activeScheduleDays && profile.activeScheduleDays.length > 0
+    const activeDays = Array.isArray(profile.activeScheduleDays)
       ? profile.activeScheduleDays
       : [1, 2, 4, 5, 6];
     const workCap = profile.dailyNecessityCap || 500;
     const restCap = profile.restDayNecessityCap !== undefined ? profile.restDayNecessityCap : 150;
-    const todayIso = today.toISOString().slice(0, 10);
+    const todayIso = FinanceEngine.getLocalDateString(today);
     const todayNecessity = FinanceEngine.calculateDailyNecessitySpend(transactions, todayIso, workCap, activeDays, restCap);
     const activeDaysStr = activeDays.map((d) => DAY_SHORT_NAMES[d]).join(', ');
 
@@ -406,21 +406,21 @@ For income: ACTION: {"action":"log_income","amount":500,"category":"Income","not
     context: AiFinancialContext
   ): AssistantResponse {
     const p = prompt.toLowerCase().trim();
-    const { profile, wallets, transactions, loans, currencySymbol } = context;
+    const { profile, wallets, transactions, loans, assets = [], currencySymbol } = context;
 
     const sortedWallets = FinanceEngine.sortWallets(wallets);
-    const totalLiquid = FinanceEngine.calculateTotalLiquidBalance(sortedWallets);
-        const activeLoans = loans.filter((l) => l.status === 'active' || l.status === 'partial');
+    const totalLiquid = FinanceEngine.calculateTotalLiquidBalance(sortedWallets, profile.currency || 'PHP');
+    const activeLoans = loans.filter((l) => l.status === 'active' || l.status === 'partial');
     const totalLent = activeLoans.reduce((sum, l) => sum + l.remainingAmount, 0);
-    
+    const totalNetWorth = FinanceEngine.calculateNetWorth(sortedWallets, loans, assets, profile.currency || 'PHP');
     const today = new Date();
     const dayOfWeek = today.getDay();
-    const activeDays = profile.activeScheduleDays && profile.activeScheduleDays.length > 0
+    const activeDays = Array.isArray(profile.activeScheduleDays)
       ? profile.activeScheduleDays
       : [1, 2, 4, 5, 6];
     const workCap = profile.dailyNecessityCap || 500;
     const restCap = profile.restDayNecessityCap !== undefined ? profile.restDayNecessityCap : 150;
-    const todayIso = today.toISOString().slice(0, 10);
+    const todayIso = FinanceEngine.getLocalDateString(today);
     const todayNecessity = FinanceEngine.calculateDailyNecessitySpend(transactions, todayIso, workCap, activeDays, restCap);
     const todayDayName = DAY_NAMES[dayOfWeek];
     const savings = FinanceEngine.calculateSavingsHistory(transactions, profile, 30);
@@ -659,8 +659,15 @@ ${list}`,
     }
 
     // ----------------------------------------------------
-    // 8. WALLET BALANCE CHECK
+    // 8. WALLET BALANCE & NET WORTH CHECK
     // ----------------------------------------------------
+    if (p.includes('net worth') || p.includes('asset') || p.includes('kayamanan')) {
+      const breakdown = sortedWallets.map((w) => `• ${w.name}: ${currencySymbol}${w.balance.toFixed(2)}`).join('\n');
+      return {
+        text: `💎 **Total Net Worth: ${currencySymbol}${totalNetWorth.toFixed(2)}**\n• Liquid Cash: ${currencySymbol}${totalLiquid.toFixed(2)}\n• Receivables: ${currencySymbol}${totalLent.toFixed(2)}\n\n💳 **Liquid Wallets**:\n${breakdown}`,
+      };
+    }
+
     if (p.includes('balance') || p.includes('wallet') || p.includes('cash') || p.includes('pera') || p.includes('how much money')) {
       const breakdown = sortedWallets.map((w) => `• **${w.name}**: ${currencySymbol}${w.balance.toFixed(2)}`).join('\n');
       return {

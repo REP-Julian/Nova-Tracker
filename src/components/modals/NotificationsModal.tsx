@@ -1,7 +1,17 @@
 import { createPortal } from 'react-dom';
-import React from 'react';
-import { X, Bell, AlertTriangle, Sparkles, HandCoins, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Bell,
+  AlertTriangle,
+  Sparkles,
+  HandCoins,
+  CheckCircle2,
+  Trash2,
+  RefreshCw,
+} from 'lucide-react';
 import { Transaction, Loan, UserProfile } from '../../types';
+import { notificationService, AppNotification } from '../../services/notificationService';
 
 interface NotificationsModalProps {
   isOpen: boolean;
@@ -28,10 +38,21 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   profile,
   currencySymbol = '$',
 }) => {
+  const [history, setHistory] = useState<AppNotification[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      notificationService.getHistory().then((list) => {
+        setHistory(list);
+        notificationService.markAllAsRead();
+      });
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   // Generate dynamic, live intelligent updates based on actual user data
-  const notifications: SmartNotification[] = [];
+  const dynamicAlerts: SmartNotification[] = [];
 
   // 1. Daily Necessity Cap Check
   const todayStr = new Date().toISOString().split('T')[0];
@@ -40,7 +61,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     .reduce((sum, t) => sum + t.amount, 0);
 
   if (todayNecessitySpend > profile.dailyNecessityCap) {
-    notifications.push({
+    dynamicAlerts.push({
       id: 'cap-exceeded',
       title: 'Daily Necessity Cap Exceeded',
       message: `You spent ${currencySymbol}${todayNecessitySpend.toFixed(2)} on essentials today, exceeding your ${currencySymbol}${profile.dailyNecessityCap.toFixed(2)} target.`,
@@ -48,7 +69,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
       timestamp: 'Today',
     });
   } else if (todayNecessitySpend > 0) {
-    notifications.push({
+    dynamicAlerts.push({
       id: 'cap-status',
       title: 'Daily Necessity Status',
       message: `${currencySymbol}${todayNecessitySpend.toFixed(2)} spent out of ${currencySymbol}${profile.dailyNecessityCap.toFixed(2)} allowance.`,
@@ -62,7 +83,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const totalReceivable = pendingLoans.reduce((sum, l) => sum + l.remainingAmount, 0);
 
   if (pendingLoans.length > 0) {
-    notifications.push({
+    dynamicAlerts.push({
       id: 'pending-loans',
       title: `${pendingLoans.length} Outstanding Loan(s)`,
       message: `You have ${currencySymbol}${totalReceivable.toFixed(2)} waiting to be collected from borrowers.`,
@@ -72,15 +93,30 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   }
 
   // 3. Welcome / Status notice
-  notifications.push({
+  dynamicAlerts.push({
     id: 'db-sync',
-    title: 'Cloud Sync Operational',
+    title: 'Cloud Real-Time Sync',
     message: profile.email
-      ? `Encrypted session active for ${profile.email}. Syncing to Supabase PostgreSQL.`
-      : 'Local offline storage active. Sign in via profile to backup to cloud.',
+      ? `Encrypted session active for ${profile.email}. Real-time Supabase subscriptions running.`
+      : 'Local offline storage active. Sign in via profile to backup & sync to cloud in real-time.',
     type: 'info',
     timestamp: 'System',
   });
+
+  const handleClearHistory = async () => {
+    await notificationService.clearHistory();
+    setHistory([]);
+  };
+
+  const formatTimestamp = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return 'Recently';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'Recently';
+    }
+  };
 
   const modalContent = (
     <div className="auth-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
@@ -107,18 +143,104 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               <Bell size={16} />
             </div>
             <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>Activity & Alerts</h3>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Real-time notifications & financial insights</div>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                Activity & Alerts
+              </h3>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Real-time phone notifications & ledger updates
+              </div>
             </div>
           </div>
-          <button type="button" className="icon-circle-btn" onClick={onClose} style={{ width: '36px', height: '36px' }}>
-            <X size={16} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {history.length > 0 && (
+              <button
+                type="button"
+                className="icon-circle-btn"
+                title="Clear activity log"
+                onClick={handleClearHistory}
+                style={{ width: '32px', height: '32px', color: 'var(--text-muted)' }}
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+            <button type="button" className="icon-circle-btn" onClick={onClose} style={{ width: '36px', height: '36px' }}>
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
-        {/* Notifications List */}
+        {/* Notifications Scroll List */}
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {notifications.map((n) => (
+          {/* Recent Real-Time Notifications History */}
+          {history.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Recent Real-Time Notifications ({history.length})
+              </div>
+              {history.map((h) => (
+                <div
+                  key={h.id}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '14px',
+                    background: 'var(--card-surface)',
+                    border: '1px solid var(--card-border)',
+                    display: 'flex',
+                    gap: '12px',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: 'var(--radius-full)',
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background:
+                        h.type === 'budget'
+                          ? 'rgba(244, 63, 94, 0.15)'
+                          : h.type === 'transaction'
+                          ? 'rgba(34, 197, 94, 0.15)'
+                          : h.type === 'loan'
+                          ? 'var(--role-accent-bg, rgba(232, 249, 83, 0.15))'
+                          : 'rgba(56, 189, 248, 0.15)',
+                      color:
+                        h.type === 'budget'
+                          ? 'var(--accent-pink)'
+                          : h.type === 'transaction'
+                          ? 'var(--accent-green)'
+                          : h.type === 'loan'
+                          ? 'var(--role-accent-color, var(--neon-yellow))'
+                          : 'var(--accent-blue)',
+                    }}
+                  >
+                    {h.type === 'budget' && <AlertTriangle size={15} />}
+                    {h.type === 'transaction' && <CheckCircle2 size={15} />}
+                    {h.type === 'loan' && <HandCoins size={15} />}
+                    {h.type === 'sync' && <RefreshCw size={15} />}
+                    {h.type === 'system' && <Sparkles size={15} />}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{h.title}</div>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{formatTimestamp(h.timestamp)}</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.4 }}>
+                      {h.body}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* System & Financial Status Overview */}
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: history.length > 0 ? '6px' : '0' }}>
+            Financial Insights & Status
+          </div>
+          {dynamicAlerts.map((n) => (
             <div
               key={n.id}
               style={{
@@ -165,7 +287,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>{n.title}</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{n.title}</div>
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{n.timestamp}</span>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>

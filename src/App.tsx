@@ -23,7 +23,9 @@ import { OfflineQueueManager } from './lib/offlineQueue';
 import { SyncService } from './services/syncService';
 import { useTheme } from './context/ThemeContext';
 import { PullToRefresh } from './components/navigation/PullToRefresh';
-import { getCurrencySymbol } from './lib/currencies';
+import { NotificationToast } from './components/navigation/NotificationToast';
+import { getCurrencySymbol, fetchLiveExchangeRates, convertFinancialDataset } from './lib/currencies';
+import { notificationService } from './services/notificationService';
 import './styles/theme.css';
 import './styles/navigation.css';
 
@@ -35,6 +37,7 @@ export const App: React.FC = () => {
   const [loans, setLoans] = useState<Loan[]>(INITIAL_LOANS);
   const [assets, setAssets] = useState<Asset[]>(INITIAL_ASSETS);
   const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddType, setQuickAddType] = useState<TransactionType>('expense');
@@ -138,6 +141,27 @@ export const App: React.FC = () => {
         }
       }
 
+      // Background tasks: fetch live exchange rates and check loan due dates
+      fetchLiveExchangeRates().catch(console.warn);
+      notificationService.checkPermission().catch(console.warn);
+
+      const todayStr = FinanceEngine.getLocalDateString();
+      const dueToday = activeLoans.filter(
+        (l) => (l.status === 'active' || l.status === 'partial') && l.dueDate && l.dueDate.startsWith(todayStr)
+      );
+      if (dueToday.length > 0) {
+        const sym = getCurrencySymbol(effectiveProfile.currency || 'PHP');
+        notificationService.send(
+          '📅 Loan Repayment Due Today',
+          `You have ${dueToday.length} loan repayment(s) scheduled for today (${dueToday.map(d => `${d.borrowerName}: ${sym}${d.remainingAmount}`).join(', ')}).`,
+          'loan'
+        );
+      }
+
+      if (session?.user) {
+        setupRealtimeChannel(session.user.id);
+      }
+
       setWallets(FinanceEngine.sortWallets(activeWallets));
       setTransactions(activeTransactions);
       setLoans(activeLoans);
@@ -149,6 +173,169 @@ export const App: React.FC = () => {
       setPendingSyncCount(qCount);
     }
     loadData();
+
+    let realtimeChannel: any = null;
+    const setupRealtimeChannel = (userId: string) => {
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+      }
+      try {
+        realtimeChannel = supabase
+          .channel(`realtime-budget-sync-${userId}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'bt_wallets', filter: `user_id=eq.${userId}` },
+            (payload) => {
+              if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                const raw = payload.new as any;
+                const updatedWallet: Wallet = {
+                  id: raw.id,
+                  name: raw.name,
+                  type: raw.type,
+                  balance: Number(raw.balance || 0),
+                  currency: raw.currency || 'PHP',
+                  icon: raw.icon || 'wallet',
+                  updatedAt: raw.updated_at || new Date().toISOString(),
+                };
+                setWallets((prev) => {
+                  const exists = prev.some((w) => w.id === updatedWallet.id);
+                  const next = exists
+                    ? prev.map((w) => (w.id === updatedWallet.id ? updatedWallet : w))
+                    : [...prev, updatedWallet];
+                  const sorted = FinanceEngine.sortWallets(next);
+                  storageService.saveWallets(sorted);
+                  return sorted;
+                });
+              } else if (payload.eventType === 'DELETE') {
+                const oldId = (payload.old as any)?.id;
+                if (oldId) {
+                  setWallets((prev) => {
+                    const next = prev.filter((w) => w.id !== oldId);
+                    storageService.saveWallets(next);
+                    return next;
+                  });
+                }
+              }
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'bt_transactions', filter: `user_id=eq.${userId}` },
+            (payload) => {
+              if (payload.eventType === 'INSERT') {
+                const raw = payload.new as any;
+                const newTx: Transaction = {
+                  id: raw.id,
+                  walletId: raw.wallet_id,
+                  type: raw.type,
+                  amount: Number(raw.amount || 0),
+                  category: raw.category,
+                  isNecessity: Boolean(raw.is_necessity),
+                  date: raw.date,
+                  notes: raw.notes || undefined,
+                  tax: Number(raw.tax || 0),
+                  syncStatus: 'synced',
+                };
+                setTransactions((prev) => {
+                  if (prev.some((t) => t.id === newTx.id)) return prev;
+                  const next = [newTx, ...prev];
+                  storageService.saveTransactions(next);
+                  return next;
+                });
+                notificationService.notifyCloudSync(`New ${newTx.type} transaction synchronized from cloud.`);
+              } else if (payload.eventType === 'DELETE') {
+                const oldId = (payload.old as any)?.id;
+                if (oldId) {
+                  setTransactions((prev) => {
+                    const next = prev.filter((t) => t.id !== oldId);
+                    storageService.saveTransactions(next);
+                    return next;
+                  });
+                }
+              }
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'bt_loans', filter: `user_id=eq.${userId}` },
+            (payload) => {
+              if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                const raw = payload.new as any;
+                setLoans((prev) => {
+                  const existing = prev.find((l) => l.id === raw.id);
+                  const updatedLoan: Loan = {
+                    id: raw.id,
+                    walletId: raw.wallet_id,
+                    borrowerName: raw.borrower_name,
+                    borrowerContact: raw.borrower_contact || undefined,
+                    principalAmount: Number(raw.principal_amount || 0),
+                    remainingAmount: Number(raw.remaining_amount || 0),
+                    lentDate: raw.lent_date,
+                    dueDate: raw.due_date || undefined,
+                    status: raw.status,
+                    notes: raw.notes || undefined,
+                    repayments: existing ? existing.repayments : [],
+                    syncStatus: 'synced',
+                  };
+                  const next = existing
+                    ? prev.map((l) => (l.id === raw.id ? updatedLoan : l))
+                    : [updatedLoan, ...prev];
+                  storageService.saveLoans(next);
+                  return next;
+                });
+              } else if (payload.eventType === 'DELETE') {
+                const oldId = (payload.old as any)?.id;
+                if (oldId) {
+                  setLoans((prev) => {
+                    const next = prev.filter((l) => l.id !== oldId);
+                    storageService.saveLoans(next);
+                    return next;
+                  });
+                }
+              }
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'bt_assets', filter: `user_id=eq.${userId}` },
+            (payload) => {
+              if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                const raw = payload.new as any;
+                const updatedAsset: Asset = {
+                  id: raw.id,
+                  name: raw.name,
+                  assetClass: raw.asset_class,
+                  value: Number(raw.value || 0),
+                  acquisitionDate: raw.acquisition_date || undefined,
+                  notes: raw.notes || undefined,
+                  syncStatus: 'synced',
+                };
+                setAssets((prev) => {
+                  const exists = prev.some((a) => a.id === updatedAsset.id);
+                  const next = exists
+                    ? prev.map((a) => (a.id === updatedAsset.id ? updatedAsset : a))
+                    : [...prev, updatedAsset];
+                  storageService.saveAssets(next);
+                  return next;
+                });
+              } else if (payload.eventType === 'DELETE') {
+                const oldId = (payload.old as any)?.id;
+                if (oldId) {
+                  setAssets((prev) => {
+                    const next = prev.filter((a) => a.id !== oldId);
+                    storageService.saveAssets(next);
+                    return next;
+                  });
+                }
+              }
+            }
+          )
+          .subscribe();
+      } catch (err) {
+        console.warn('Realtime subscription error:', err);
+      }
+    };
 
     const onUserAuthenticated = async (user: { id: string; email?: string; user_metadata?: Record<string, any> }) => {
       if (typeof window !== 'undefined' && window.history?.replaceState) {
@@ -238,6 +425,7 @@ export const App: React.FC = () => {
 
       setProfile(remote);
       await storageService.saveProfile(remote);
+      setupRealtimeChannel(user.id);
       setIsAuthModalOpen(false);
     };
 
@@ -246,6 +434,10 @@ export const App: React.FC = () => {
       if ((event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') && session?.user) {
         await onUserAuthenticated(session.user);
       } else if (event === 'SIGNED_OUT') {
+        if (realtimeChannel) {
+          supabase.removeChannel(realtimeChannel);
+          realtimeChannel = null;
+        }
         if (typeof window !== 'undefined' && window.history?.replaceState) {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
@@ -343,8 +535,22 @@ export const App: React.FC = () => {
     return () => {
       clearInterval(interval);
       subscription.unsubscribe();
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+      }
       if (unlistenDeepLink) unlistenDeepLink();
     };
+  }, []);
+
+  // Listen to in-app notification count
+  useEffect(() => {
+    notificationService.getHistory().then((history) => {
+      setUnreadNotifCount(history.filter((n) => !n.read).length);
+    });
+    return notificationService.subscribe((list) => {
+      setUnreadNotifCount(list.filter((n) => !n.read).length);
+    });
   }, []);
 
   // Handlers for transactions
@@ -400,6 +606,43 @@ export const App: React.FC = () => {
     SyncService.processOfflineQueue().then(() => {
       OfflineQueueManager.getPendingCount().then(setPendingSyncCount);
     });
+
+    // Real-time phone notification trigger
+    const currencySymbol = getCurrencySymbol(profile.currency || 'PHP');
+    const targetWallet = wallets.find((w) => w.id === data.walletId);
+    notificationService.notifyTransaction(
+      data.type,
+      data.amount,
+      currencySymbol,
+      data.category,
+      targetWallet?.name
+    );
+
+    // Check daily necessity budget cap and notify if threshold reached
+    if (data.type === 'expense' && data.isNecessity) {
+      const todaySpendStats = FinanceEngine.calculateDailyNecessitySpend(
+        updatedTxs,
+        FinanceEngine.getLocalDateString(),
+        profile.dailyNecessityCap,
+        profile.activeScheduleDays,
+        profile.restDayNecessityCap
+      );
+      if (todaySpendStats.isOverBudget) {
+        notificationService.notifyBudgetAlert(
+          todaySpendStats.spentToday,
+          todaySpendStats.dailyCap,
+          currencySymbol,
+          true
+        );
+      } else if (todaySpendStats.percentage >= 80) {
+        notificationService.notifyBudgetAlert(
+          todaySpendStats.spentToday,
+          todaySpendStats.dailyCap,
+          currencySymbol,
+          false
+        );
+      }
+    }
   };
 
   // Handler for deleting a transaction and reversing wallet balance
@@ -474,6 +717,9 @@ export const App: React.FC = () => {
     SyncService.processOfflineQueue().then(() => {
       OfflineQueueManager.getPendingCount().then(setPendingSyncCount);
     });
+
+    const currencySymbol = getCurrencySymbol(profile.currency || 'PHP');
+    notificationService.notifyLoanEvent('lent', data.borrowerName, data.amount, currencySymbol, data.notes);
   };
 
   // Handlers for loan repayment
@@ -506,6 +752,9 @@ export const App: React.FC = () => {
     SyncService.processOfflineQueue().then(() => {
       OfflineQueueManager.getPendingCount().then(setPendingSyncCount);
     });
+
+    const currencySymbol = getCurrencySymbol(profile.currency || 'PHP');
+    notificationService.notifyLoanEvent('repaid', loan.borrowerName, amount, currencySymbol, notes);
   };
 
   // Handler for assets
@@ -559,11 +808,52 @@ export const App: React.FC = () => {
     });
   };
 
-  // Handler for profile updates
+  // Handler for profile updates with real-time exact currency conversion
   const handleUpdateProfile = async (updated: UserProfile) => {
-    setProfile(updated);
-    await storageService.saveProfile(updated);
-    await OfflineQueueManager.enqueue('profile', 'update', updated);
+    const prevCurrency = profile.currency || 'PHP';
+    const newCurrency = updated.currency || 'PHP';
+
+    if (newCurrency && newCurrency !== prevCurrency) {
+      // Real-time exact conversion across all wallets, transactions, loans, assets, caps
+      const converted = convertFinancialDataset(
+        { wallets, transactions, loans, assets, profile: updated },
+        prevCurrency,
+        newCurrency
+      );
+
+      const sortedWallets = FinanceEngine.sortWallets(converted.wallets);
+      setProfile(converted.profile);
+      setWallets(sortedWallets);
+      setTransactions(converted.transactions);
+      setLoans(converted.loans);
+      setAssets(converted.assets);
+
+      await storageService.saveProfile(converted.profile);
+      await storageService.saveWallets(sortedWallets);
+      await storageService.saveTransactions(converted.transactions);
+      await storageService.saveLoans(converted.loans);
+      await storageService.saveAssets(converted.assets);
+
+      const batch = [
+        ...sortedWallets.map((w) => ({ entity: 'wallets' as const, action: 'update' as const, payload: w })),
+        ...converted.transactions.map((t) => ({ entity: 'transactions' as const, action: 'update' as const, payload: t })),
+        ...converted.loans.map((l) => ({ entity: 'loans' as const, action: 'update' as const, payload: l })),
+        ...converted.assets.map((a) => ({ entity: 'assets' as const, action: 'update' as const, payload: a })),
+        { entity: 'profile' as const, action: 'update' as const, payload: converted.profile },
+      ];
+      await OfflineQueueManager.enqueueBatch(batch);
+
+      notificationService.send(
+        '💱 Real-Time Currency Converted',
+        `Balances & records converted from ${prevCurrency} to ${newCurrency} at 1 ${prevCurrency} = ${converted.rate.toFixed(4)} ${newCurrency}.`,
+        'system'
+      );
+    } else {
+      setProfile(updated);
+      await storageService.saveProfile(updated);
+      await OfflineQueueManager.enqueue('profile', 'update', updated);
+    }
+
     SyncService.processOfflineQueue().then(() => {
       OfflineQueueManager.getPendingCount().then(setPendingSyncCount);
     });
@@ -572,6 +862,9 @@ export const App: React.FC = () => {
   return (
     <div className="app-shell">
       <div className="mobile-frame">
+        {/* Real-time Heads-up In-App Notification Toast */}
+        <NotificationToast onOpenNotifications={() => setIsNotificationsOpen(true)} />
+
         {/* Top Header with Clickable Profile Chip */}
         <ProfileHeaderChip
           profile={profile}
@@ -579,7 +872,7 @@ export const App: React.FC = () => {
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenNotifications={() => setIsNotificationsOpen(true)}
           hasUnreadNotifications={
-            loans.some((l) => l.status === 'active' || l.status === 'partial')
+            unreadNotifCount > 0 || loans.some((l) => l.status === 'active' || l.status === 'partial')
           }
         />
 
@@ -698,6 +991,7 @@ export const App: React.FC = () => {
                     wallets={wallets}
                     assets={assets}
                     currencySymbol={currencySymbol}
+                    currency={profile.currency || 'PHP'}
                     initialSubTab={currentTab === 'assets' ? 'assets' : 'loans'}
                     onLendMoney={handleLendMoney}
                     onRepayLoan={handleRepayLoan}

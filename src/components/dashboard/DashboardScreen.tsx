@@ -6,6 +6,7 @@ import { QuickActions } from './QuickActions';
 import { TransactionFeed } from './TransactionFeed';
 import { Wallet, Transaction, UserProfile } from '../../types';
 import { FinanceEngine } from '../../services/financeEngine';
+import { useMidnightReset } from '../../hooks/useMidnightReset';
 import '../../styles/dashboard.css';
 
 interface DashboardScreenProps {
@@ -31,14 +32,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onDeleteTransaction,
   onViewAll,
 }) => {
+  const currentDate = useMidnightReset();
   const sortedWallets = FinanceEngine.sortWallets(wallets);
-  const totalBalance = FinanceEngine.calculateTotalLiquidBalance(sortedWallets);
+  const totalBalance = FinanceEngine.calculateTotalLiquidBalance(sortedWallets, profile.currency || 'PHP');
   const { income, expense } = FinanceEngine.calculateMonthlyIncomeAndExpense(transactions);
   const dailyNecessity = FinanceEngine.calculateDailyNecessitySpend(
     transactions,
-    new Date().toISOString().slice(0, 10),
+    currentDate,
     profile.dailyNecessityCap,
-    profile.activeScheduleDays || [1, 2, 4, 5, 6],
+    profile.activeScheduleDays ?? [1, 2, 4, 5, 6],
     profile.restDayNecessityCap !== undefined ? profile.restDayNecessityCap : 150
   );
 

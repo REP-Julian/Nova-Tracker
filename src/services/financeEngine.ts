@@ -1,4 +1,5 @@
 import { Wallet, Transaction, Loan, Asset, LoanRepayment, UserProfile } from '../types';
+import { convertCurrency } from '../lib/currencies';
 
 export interface CategorySummary {
   category: string;
@@ -95,8 +96,13 @@ export class FinanceEngine {
   /**
    * Sums all liquid wallet balances
    */
-  public static calculateTotalLiquidBalance(wallets: Wallet[]): number {
-    return wallets.reduce((acc, w) => acc + w.balance, 0);
+  public static calculateTotalLiquidBalance(wallets: Wallet[], targetCurrency?: string): number {
+    return wallets.reduce((acc, w) => {
+      const balance = targetCurrency && w.currency
+        ? convertCurrency(w.balance, w.currency, targetCurrency)
+        : w.balance;
+      return acc + balance;
+    }, 0);
   }
 
   /**
@@ -155,11 +161,21 @@ export class FinanceEngine {
   }
 
   /**
+   * Returns YYYY-MM-DD representing local calendar date
+   */
+  public static getLocalDateString(d: Date = new Date()): string {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
    * Calculates daily necessity spend and remaining allowance with schedule awareness
    */
   public static calculateDailyNecessitySpend(
     transactions: Transaction[],
-    dateStr: string = new Date().toISOString().slice(0, 10),
+    dateStr: string = FinanceEngine.getLocalDateString(),
     dailyCap: number = 500,
     activeDays: number[] = [1, 2, 4, 5, 6], // default Mon, Tue, Thu, Fri, Sat
     restCap?: number
@@ -189,8 +205,16 @@ export class FinanceEngine {
     }
 
     // Determine if dateStr is active work/school day or rest day
-    const dayOfWeek = new Date(dateStr).getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
-    const isWorkDay = activeDays.includes(dayOfWeek);
+    // Parse YYYY-MM-DD components directly to avoid UTC midnight timezone shifting
+    let dayOfWeek: number;
+    const dateParts = dateStr.split('T')[0].split('-').map(Number);
+    if (dateParts.length === 3 && !isNaN(dateParts[0]) && !isNaN(dateParts[1]) && !isNaN(dateParts[2])) {
+      dayOfWeek = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]).getDay();
+    } else {
+      dayOfWeek = new Date().getDay();
+    }
+
+    const isWorkDay = (activeDays || []).map(Number).includes(dayOfWeek);
     // If restCap was not explicitly specified or configured, default to dailyCap
     const effectiveCap = isWorkDay || restCap === undefined ? dailyCap : restCap;
 
@@ -220,7 +244,7 @@ export class FinanceEngine {
     profile: UserProfile,
     daysCount: number = 30
   ): SavingsHistoryResult {
-    const activeDays = profile.activeScheduleDays && profile.activeScheduleDays.length > 0
+    const activeDays = Array.isArray(profile.activeScheduleDays)
       ? profile.activeScheduleDays
       : [1, 2, 4, 5, 6];
     const workCap = profile.dailyNecessityCap || 500;
@@ -237,7 +261,7 @@ export class FinanceEngine {
       const dateStr = `${year}-${month}-${day}`;
 
       const dayOfWeek = targetDate.getDay();
-      const isWorkDay = activeDays.includes(dayOfWeek);
+      const isWorkDay = (activeDays || []).map(Number).includes(dayOfWeek);
       const allowance = isWorkDay ? workCap : restCap;
 
       let spent = 0;
@@ -289,10 +313,17 @@ export class FinanceEngine {
   /**
    * Calculates total money lent out currently active/receivable
    */
-  public static calculateTotalMoneyLent(loans: Loan[]): number {
+  public static calculateTotalMoneyLent(loans: Loan[], wallets?: Wallet[], targetCurrency?: string): number {
     return loans.reduce((acc, l) => {
       if (l.status !== 'settled' && l.status !== 'defaulted') {
-        return acc + l.remainingAmount;
+        let amt = l.remainingAmount;
+        if (targetCurrency && wallets) {
+          const w = wallets.find((wallet) => wallet.id === l.walletId);
+          if (w?.currency && w.currency !== targetCurrency) {
+            amt = convertCurrency(amt, w.currency, targetCurrency);
+          }
+        }
+        return acc + amt;
       }
       return acc;
     }, 0);
@@ -301,12 +332,12 @@ export class FinanceEngine {
   /**
    * Calculates Total Net Worth = Liquid Wallets + Active Loans Receivable + Other Assets
    */
-  public static calculateNetWorth(wallets: Wallet[], loans: Loan[], assets: Asset[]): number {
-    const liquidTotal = this.calculateTotalLiquidBalance(wallets);
-    const receivablesTotal = this.calculateTotalMoneyLent(loans);
+  public static calculateNetWorth(wallets: Wallet[], loans: Loan[], assets: Asset[], targetCurrency?: string): number {
+    const liquidTotal = this.calculateTotalLiquidBalance(wallets, targetCurrency);
+    const receivablesTotal = this.calculateTotalMoneyLent(loans, wallets, targetCurrency);
     const otherAssetsTotal = assets.reduce((acc, a) => acc + a.value, 0);
 
-    return liquidTotal + receivablesTotal + otherAssetsTotal;
+    return Number((liquidTotal + receivablesTotal + otherAssetsTotal).toFixed(2));
   }
 
   /**

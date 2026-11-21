@@ -64,7 +64,7 @@ export const DailyNecessityWidget: React.FC<DailyNecessityWidgetProps> = ({
       </div>
 
       <div className="necessity-widget-footer">
-        <span>Groceries, Lunch, Commute</span>
+        <span>Groceries, Lunch, Commute • Resets 12:00 AM</span>
         <span
           style={{
             color: isOverBudget ? 'var(--accent-pink)' : 'var(--accent-green)',

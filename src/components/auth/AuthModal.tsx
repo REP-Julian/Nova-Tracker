@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { databaseApi } from '../../lib/database';
 import { UserProfile } from '../../types';
+import { detectUserCountryCurrency } from '../../lib/currencies';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Mail, Lock, User, Phone, Shield, ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react';
@@ -127,7 +128,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
             contactNumber: meta.contact_number || '',
             role: meta.role || 'Primary Earner',
             theme: 'dark',
-            currency: 'PHP',
+            currency: detectUserCountryCurrency(),
             dailyNecessityCap: 500,
             activeScheduleDays: [1, 2, 4, 5, 6],
             restDayNecessityCap: 150,
@@ -200,8 +201,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           contactNumber: contactNumber.trim(),
           role,
           theme: 'dark',
-          currency: 'USD',
-          dailyNecessityCap: 60,
+          currency: detectUserCountryCurrency(),
+          dailyNecessityCap: detectUserCountryCurrency() === 'USD' ? 60 : 500,
+          activeScheduleDays: [1, 2, 4, 5, 6],
+          restDayNecessityCap: detectUserCountryCurrency() === 'USD' ? 20 : 150,
         };
 
         const success = await databaseApi.upsertRemoteProfile(newProfile);

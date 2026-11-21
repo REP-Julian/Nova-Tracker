@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Wallet, Transaction, Loan, Asset, UserProfile } from '../types';
+import { detectUserCountryCurrency } from './currencies';
 
 export const databaseApi = {
   async fetchRemoteWallets(): Promise<Wallet[] | null> {
@@ -13,7 +14,7 @@ export const databaseApi = {
       name: w.name,
       type: w.type,
       balance: Number(w.balance || 0),
-      currency: w.currency || 'USD',
+      currency: w.currency || detectUserCountryCurrency(),
       icon: w.icon || 'wallet',
       updatedAt: w.updated_at || new Date().toISOString(),
     }));
@@ -45,6 +46,30 @@ export const databaseApi = {
       console.warn('Supabase fetch loans error:', error.message);
       return null;
     }
+
+    const loanIds = (data || []).map((l: any) => l.id);
+    const repaymentsMap: Record<string, any[]> = {};
+    if (loanIds.length > 0) {
+      const { data: repData, error: repError } = await supabase
+        .from('bt_loan_repayments')
+        .select('*')
+        .in('loan_id', loanIds)
+        .order('date', { ascending: true });
+      if (!repError && repData) {
+        for (const r of repData) {
+          if (!repaymentsMap[r.loan_id]) repaymentsMap[r.loan_id] = [];
+          repaymentsMap[r.loan_id].push({
+            id: r.id,
+            loanId: r.loan_id,
+            amount: Number(r.amount || 0),
+            date: r.date,
+            destinationWalletId: r.destination_wallet_id,
+            notes: r.notes || undefined,
+          });
+        }
+      }
+    }
+
     return (data || []).map((l: any) => ({
       id: l.id,
       walletId: l.wallet_id,
@@ -56,7 +81,7 @@ export const databaseApi = {
       dueDate: l.due_date || undefined,
       status: l.status,
       notes: l.notes || undefined,
-      repayments: [],
+      repayments: repaymentsMap[l.id] || [],
       syncStatus: 'synced' as const,
     }));
   },
@@ -155,6 +180,39 @@ export const databaseApi = {
       console.warn('Upsert loan error:', error.message);
       return false;
     }
+    if (loan.repayments && loan.repayments.length > 0) {
+      for (const rep of loan.repayments) {
+        await this.upsertRemoteRepayment(rep);
+      }
+    }
+    return true;
+  },
+
+  async upsertRemoteRepayment(repayment: {
+    id: string;
+    loanId: string;
+    amount: number;
+    date: string;
+    destinationWalletId: string;
+    notes?: string;
+  }): Promise<boolean> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const payload: Record<string, any> = {
+      id: repayment.id,
+      loan_id: repayment.loanId,
+      amount: repayment.amount,
+      date: repayment.date,
+      destination_wallet_id: repayment.destinationWalletId,
+      notes: repayment.notes || null,
+    };
+    if (session?.user?.id) {
+      payload.user_id = session.user.id;
+    }
+    const { error } = await supabase.from('bt_loan_repayments').upsert(payload);
+    if (error) {
+      console.warn('Upsert loan repayment error:', error.message);
+      return false;
+    }
     return true;
   },
 
@@ -190,6 +248,8 @@ export const databaseApi = {
       theme: profile.theme,
       currency: profile.currency,
       daily_necessity_cap: profile.dailyNecessityCap,
+      active_schedule_days: profile.activeScheduleDays,
+      rest_day_necessity_cap: profile.restDayNecessityCap,
       updated_at: new Date().toISOString()
     });
     if (error) {
@@ -237,8 +297,12 @@ export const databaseApi = {
       contactNumber: data.contact_number || '',
       role: data.role || 'Primary Earner',
       theme: data.theme || 'dark',
-      currency: data.currency || 'USD',
-      dailyNecessityCap: Number(data.daily_necessity_cap || 60),
+      currency: data.currency || detectUserCountryCurrency(),
+      dailyNecessityCap: Number(data.daily_necessity_cap || 500),
+      activeScheduleDays: Array.isArray(data.active_schedule_days) ? data.active_schedule_days : undefined,
+      restDayNecessityCap: data.rest_day_necessity_cap !== null && data.rest_day_necessity_cap !== undefined
+        ? Number(data.rest_day_necessity_cap)
+        : undefined,
     };
   },
 };

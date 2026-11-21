@@ -1,5 +1,6 @@
 import { get, set } from 'idb-keyval';
 import { Wallet, Transaction, Loan, Asset, UserProfile } from '../types';
+import { detectUserCountryCurrency } from './currencies';
 
 export interface AiConfig {
   aiBaseUrl?: string;
@@ -55,7 +56,7 @@ export const INITIAL_WALLETS: Wallet[] = [
     name: 'Cash & Pocket',
     type: 'cash',
     balance: 0.00,
-    currency: 'PHP',
+    currency: detectUserCountryCurrency(),
     icon: 'banknote',
     updatedAt: new Date().toISOString(),
   },
@@ -64,7 +65,7 @@ export const INITIAL_WALLETS: Wallet[] = [
     name: 'Savings Safe',
     type: 'savings',
     balance: 0.00,
-    currency: 'PHP',
+    currency: detectUserCountryCurrency(),
     icon: 'vault',
     updatedAt: new Date().toISOString(),
   },
@@ -84,7 +85,7 @@ export const INITIAL_PROFILE: UserProfile = {
   contactNumber: '',
   role: 'Primary Earner',
   theme: 'dark',
-  currency: 'PHP',
+  currency: detectUserCountryCurrency(),
   dailyNecessityCap: 500.00,
   activeScheduleDays: [1, 2, 4, 5, 6], // Mon, Tue, Thu, Fri, Sat
   restDayNecessityCap: 150.00,

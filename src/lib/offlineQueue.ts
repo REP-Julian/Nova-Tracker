@@ -43,6 +43,30 @@ export class OfflineQueueManager {
     return mutation;
   }
 
+  public static async enqueueBatch(
+    items: Array<{
+      entity: SyncMutation['entity'];
+      action: SyncMutation['action'];
+      payload: unknown;
+    }>
+  ): Promise<SyncMutation[]> {
+    if (items.length === 0) return [];
+    const now = Date.now();
+    const mutations: SyncMutation[] = items.map((item, idx) => ({
+      id: crypto.randomUUID ? crypto.randomUUID() : `mut-${now}-${idx}-${Math.random().toString(36).slice(2)}`,
+      entity: item.entity,
+      action: item.action,
+      payload: item.payload,
+      timestamp: now + idx,
+      retryCount: 0,
+    }));
+
+    const queue = await this.getQueue();
+    queue.push(...mutations);
+    await this.setQueue(queue);
+    return mutations;
+  }
+
   public static async peek(): Promise<SyncMutation | null> {
     const queue = await this.getQueue();
     return queue.length > 0 ? queue[0] : null;

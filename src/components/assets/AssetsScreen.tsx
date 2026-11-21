@@ -17,6 +17,7 @@ interface AssetsScreenProps {
   }) => void;
   onDeleteAsset?: (asset: Asset) => void;
   currencySymbol?: string;
+  currency?: string;
 }
 
 export const AssetsScreen: React.FC<AssetsScreenProps> = ({
@@ -26,12 +27,13 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({
   onAddAsset,
   onDeleteAsset,
   currencySymbol = '$',
+  currency,
 }) => {
   const [isAddOpen, setIsAddOpen] = useState(false);
 
-  const totalLiquid = FinanceEngine.calculateTotalLiquidBalance(wallets);
-  const totalReceivables = FinanceEngine.calculateTotalMoneyLent(loans);
-  const totalNetWorth = FinanceEngine.calculateNetWorth(wallets, loans, assets);
+  const totalLiquid = FinanceEngine.calculateTotalLiquidBalance(wallets, currency);
+  const totalReceivables = FinanceEngine.calculateTotalMoneyLent(loans, wallets, currency);
+  const totalNetWorth = FinanceEngine.calculateNetWorth(wallets, loans, assets, currency);
 
   return (
     <div className="assets-container">

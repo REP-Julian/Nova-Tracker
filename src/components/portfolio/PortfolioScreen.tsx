@@ -9,6 +9,7 @@ interface PortfolioScreenProps {
   wallets: Wallet[];
   assets: Asset[];
   currencySymbol?: string;
+  currency?: string;
   initialSubTab?: 'loans' | 'assets';
   onLendMoney: (data: {
     sourceWalletId: string;
@@ -34,6 +35,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({
   wallets,
   assets,
   currencySymbol = '₱',
+  currency = 'PHP',
   initialSubTab = 'loans',
   onLendMoney,
   onRepayLoan,
@@ -147,6 +149,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({
           loans={loans}
           assets={assets}
           currencySymbol={currencySymbol}
+          currency={currency}
           onAddAsset={onAddAsset}
           onDeleteAsset={onDeleteAsset}
         />

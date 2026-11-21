@@ -159,7 +159,7 @@ export const AiAssistantScreen: React.FC<AiAssistantScreenProps> = ({
           m.id === botMsgId
             ? {
                 ...m,
-                text: `I have analyzed your balances. You have ${currencySymbol}${FinanceEngine.calculateTotalLiquidBalance(wallets).toFixed(2)} in total liquid balance. Ask me "where did my money go?" or "paano makatipid?"!`,
+                text: `I have analyzed your balances. You have ${currencySymbol}${FinanceEngine.calculateTotalLiquidBalance(wallets, profile.currency || 'PHP').toFixed(2)} in total liquid balance. Ask me "where did my money go?" or "paano makatipid?"!`,
               }
             : m
         )
