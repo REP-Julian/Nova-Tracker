@@ -11,8 +11,39 @@
 **A high-performance personal finance manager and AI financial advisor built with React 19, Tauri 2.0, and Supabase.**  
 *Strict accounting rules, offline-first IndexedDB storage, real-time cloud synchronization, and custom OpenAI/Groq/Ollama LLM integration.*
 
-[Architecture](#-system-architecture) • [Core Features](#-core-features) • [Data Flow](#-data-flow-charts) • [AI Assistant](#-ai-copilot-setup) • [Installation](#-getting-started)
+[App Preview](#-app-preview) • [Architecture](#-system-architecture) • [Core Features](#-core-features) • [Data Flow](#-data-flow-charts) • [AI Assistant](#-ai-copilot-setup) • [Installation](#-getting-started)
 
+</div>
+
+---
+
+## 📱 App Preview
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="20%">
+        <b>Home Dashboard</b><br/><br/>
+        <img src="docs/screenshots/dashboard.jpg" alt="Home Dashboard" width="220" />
+      </td>
+      <td align="center" width="20%">
+        <b>Transactions Feed</b><br/><br/>
+        <img src="docs/screenshots/transactions.jpg" alt="Transactions Feed" width="220" />
+      </td>
+      <td align="center" width="20%">
+        <b>Nova AI Copilot</b><br/><br/>
+        <img src="docs/screenshots/ai-advisor.jpg" alt="Nova AI Financial Advisor" width="220" />
+      </td>
+      <td align="center" width="20%">
+        <b>Spending Analytics</b><br/><br/>
+        <img src="docs/screenshots/statistics.jpg" alt="Spending Analytics" width="220" />
+      </td>
+      <td align="center" width="20%">
+        <b>Money Lent & Net Worth</b><br/><br/>
+        <img src="docs/screenshots/money-lent.jpg" alt="Money Lent & Net Worth Ledger" width="220" />
+      </td>
+    </tr>
+  </table>
 </div>
 
 ---
