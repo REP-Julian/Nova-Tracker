@@ -14,6 +14,31 @@ val tauriProperties = Properties().apply {
     }
 }
 
+val keystoreProperties = Properties().apply {
+    val propFile = file("keystore.properties").takeIf { it.exists() }
+        ?: rootProject.file("keystore.properties").takeIf { it.exists() }
+    if (propFile != null && propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
+val keystoreFilePath = System.getenv("KEYSTORE_FILE")
+    ?: keystoreProperties.getProperty("KEYSTORE_FILE")
+    ?: keystoreProperties.getProperty("storeFile")
+    ?: "release-key.jks"
+
+val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
+    ?: keystoreProperties.getProperty("KEYSTORE_PASSWORD")
+    ?: keystoreProperties.getProperty("storePassword")
+
+val keystoreAlias = System.getenv("KEY_ALIAS")
+    ?: keystoreProperties.getProperty("KEY_ALIAS")
+    ?: keystoreProperties.getProperty("keyAlias")
+
+val keystoreKeyPassword = System.getenv("KEY_PASSWORD")
+    ?: keystoreProperties.getProperty("KEY_PASSWORD")
+    ?: keystoreProperties.getProperty("keyPassword")
+
 android {
     compileSdk = 37
     namespace = "com.julian.budgettracker"
@@ -25,14 +50,24 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
+    val keystoreResolvedFile = file(keystoreFilePath).takeIf { it.exists() }
+        ?: rootProject.file(keystoreFilePath).takeIf { it.exists() }
+
+    val hasReleaseSigning = keystoreResolvedFile != null &&
+        !keystorePassword.isNullOrBlank() &&
+        !keystoreAlias.isNullOrBlank() &&
+        !keystoreKeyPassword.isNullOrBlank()
+
     signingConfigs {
         create("release") {
-            storeFile = file("release-key.jks")
-            storePassword = "budgettracker123"
-            keyAlias = "budgettracker"
-            keyPassword = "budgettracker123"
-            enableV1Signing = true
-            enableV2Signing = true
+            if (hasReleaseSigning) {
+                storeFile = keystoreResolvedFile
+                storePassword = keystorePassword
+                keyAlias = keystoreAlias
+                keyPassword = keystoreKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+            }
         }
     }
     buildTypes {
@@ -49,7 +84,9 @@ android {
             }
         }
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
                enable = true
             }

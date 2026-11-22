@@ -16,6 +16,11 @@ src-tauri/gen/android/local.properties
 *.apk
 *.aab
 
+# Signing keys and credentials
+*.jks
+*.keystore
+keystore.properties
+
 # Environment and sensitive keys
 .env
 .env.*

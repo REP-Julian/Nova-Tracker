@@ -1,5 +1,5 @@
 -- Multi-Tenant RLS Isolation for Budget Tracker
--- Run in Supabase SQL Editor: https://supabase.com/dashboard/project/ubtdybxvgdvgphgnspcp/sql/new
+-- Run in Supabase SQL Editor
 
 -- 1. Add user_id column with default auth.uid()
 ALTER TABLE bt_wallets ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid();
@@ -8,12 +8,12 @@ ALTER TABLE bt_loans ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users
 ALTER TABLE bt_assets ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid();
 ALTER TABLE bt_loan_repayments ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid();
 
--- 2. Associate existing records with Julian's account
-UPDATE bt_wallets SET user_id = '01a3d1a8-4c27-4a7a-88e5-18fa464c7c9f' WHERE user_id IS NULL;
-UPDATE bt_transactions SET user_id = '01a3d1a8-4c27-4a7a-88e5-18fa464c7c9f' WHERE user_id IS NULL;
-UPDATE bt_loans SET user_id = '01a3d1a8-4c27-4a7a-88e5-18fa464c7c9f' WHERE user_id IS NULL;
-UPDATE bt_assets SET user_id = '01a3d1a8-4c27-4a7a-88e5-18fa464c7c9f' WHERE user_id IS NULL;
-UPDATE bt_loan_repayments SET user_id = '01a3d1a8-4c27-4a7a-88e5-18fa464c7c9f' WHERE user_id IS NULL;
+-- 2. Associate existing records with default user account
+UPDATE bt_wallets SET user_id = '00000000-0000-0000-0000-000000000000' WHERE user_id IS NULL;
+UPDATE bt_transactions SET user_id = '00000000-0000-0000-0000-000000000000' WHERE user_id IS NULL;
+UPDATE bt_loans SET user_id = '00000000-0000-0000-0000-000000000000' WHERE user_id IS NULL;
+UPDATE bt_assets SET user_id = '00000000-0000-0000-0000-000000000000' WHERE user_id IS NULL;
+UPDATE bt_loan_repayments SET user_id = '00000000-0000-0000-0000-000000000000' WHERE user_id IS NULL;
 
 -- 3. Replace public policies with strict per-user RLS policies
 DROP POLICY IF EXISTS "Public access for bt_wallets" ON bt_wallets;
